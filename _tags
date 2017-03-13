@@ -1,0 +1,2 @@
+true: package(core,zarith)
+true: thread
