@@ -1,2 +1,2 @@
-build with "ocamlbuild -use-ocamlbuild ffarith.native" 
-        or "ocamlbuild -use-ocamlbuild ffarith.byte" 
+build with "ocamlbuild -use-ocamlfind ffarith.native" 
+        or "ocamlbuild -use-ocamlfind ffarith.byte" 
