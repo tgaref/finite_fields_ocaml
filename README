@@ -1,2 +1,3 @@
-build with "ocamlbuild -use-ocamlfind ffarith.native" 
-        or "ocamlbuild -use-ocamlfind ffarith.byte" 
+This library contains an implementation of finite field arithmetic in ocaml.
+The intended use is exploratory programming, so performance is desired but not
+a primary goal. 
