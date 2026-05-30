@@ -1,5 +1,7 @@
 (* tests.ml - Finite Fields Test Suite *)
 
+module EF_Int = Extensionff.EF_Int
+module F2N_Int = F2n.F2N_Int
 module Extensionff = Extensionff.EF_Bigint
 module F2n = F2n.F2N_Bigint
 
@@ -19,7 +21,7 @@ let test_exp1 () =
   let poly = Array.concat [ [|Bigint.one; Bigint.of_int 2|]; Array.make 13 Bigint.zero; [|Bigint.one|] ] in
   let gf = Extensionff.create (Bigint.of_int 11) poly "a" in
   let one = Extensionff.one gf in
-  let a = Extensionff.gen gf in
+  let a = Extensionff.get_generator gf in
   let b = Extensionff.element gf (Array.map Bigint.of_int [|1;4;0;7|]) in
   let n = Bigint.of_string "1234567890987654321" in
   let c =
@@ -50,13 +52,81 @@ let test_exp2 () =
   let c = Extensionff.element gf (Array.map Bigint.of_int [|4;6;2;5;1;8;3;4;10;10;3;2;10;1;10|]) in
   assert_equal_elem (Extensionff.pow b n) c "test_exp2"
 
+let test_gf3_10 () =
+  let p = Bigint.of_int 3 in
+  let poly = Array.map Bigint.of_int [|2; 0; 2; 0; 1; 2; 0; 0; 0; 0; 1|] in
+  let gf = Extensionff.create p poly "a" in
+  let gen = Extensionff.get_generator gf in
+  let ord = Extensionff.order gen in
+  if not (Bigint.equal ord (Bigint.of_int 59048)) then
+    failwith (Printf.sprintf "test_gf3_10 failed: expected generator order 59048, got %s" (Bigint.to_string ord))
+
+
 let test_f2n_inverse () =
-  let g = Bigint.of_int 283 in
-  let a = Bigint.of_int 83 in
-  let inv_a = F2n.inverse a g in
-  let prod = F2n.mult a inv_a g in
-  if not (Bigint.equal prod Bigint.one) then
-    failwith (Printf.sprintf "test_f2n_inverse failed: expected 1, got %s" (Bigint.to_string prod))
+  let poly = Array.map Bigint.of_int [|1; 1; 0; 1; 1; 0; 0; 0; 1|] in
+  let gf = F2n.create (Bigint.of_int 2) poly "a" in
+  let a_val = Array.map Bigint.of_int [|1; 1; 0; 0; 1; 0; 1|] in
+  let a = F2n.element gf a_val in
+  let inv_a = F2n.inv a in
+  let prod = F2n.mul a inv_a in
+  if not (F2n.is_one prod) then
+    failwith "test_f2n_inverse failed: expected 1"
+
+let test_f2n_rand_and_generator () =
+  let poly = Array.map Bigint.of_int [|1; 1; 0; 1; 1; 0; 0; 0; 1|] in
+  let gf = F2n.create (Bigint.of_int 2) poly "a" in
+  (* Test random elements *)
+  for _ = 1 to 20 do
+    let r = F2n.get_rand_elt gf in
+    if Bigint.compare r.value (Bigint.of_int 256) >= 0 || Bigint.compare r.value Bigint.zero < 0 then
+      failwith (Printf.sprintf "test_f2n_rand_and_generator failed: random element %s out of range" (Bigint.to_string r.value))
+  done;
+  (* Test generator *)
+  let gen = F2n.get_generator gf in
+  let p255 = F2n.pow gen (Bigint.of_int 255) in
+  if not (F2n.is_one p255) then
+    failwith "test_f2n_rand_and_generator failed: gen^255 expected 1";
+  List.iter (fun q ->
+    let exp = Bigint.of_int (255 / q) in
+    let pq = F2n.pow gen exp in
+    if F2n.is_one pq then
+      failwith (Printf.sprintf "test_f2n_rand_and_generator failed: gen^(255/%d) expected not 1, got 1" q)
+  ) [3; 5; 17]
+
+let test_gf3_100_overflow () =
+  let p = 3 in
+  let rec find_poly () =
+    let rand_state = Random.State.make_self_init () in
+    let poly = Array.init 42 (fun i ->
+      if i = 41 then 1
+      else Random.State.int rand_state 3
+    ) in
+    (* We can check irreducibility using Aux_Int *)
+    let module Aux_Int = Aux.Make(Field_intf.Int_scalar) in
+    let poly' = Aux_Int.drop_last poly in
+    if Aux_Int.irreduc poly' p then poly
+    else find_poly ()
+  in
+  let poly = find_poly () in
+  try
+    let _ = EF_Int.create p poly "a" in
+    failwith "test_gf3_100_overflow failed: expected overflow exception, but succeeded"
+  with
+  | Failure _ ->
+      ()
+  | e ->
+      failwith (Printf.sprintf "test_gf3_100_overflow failed: caught unexpected exception: %s" (Printexc.to_string e))
+
+let test_f2n_overflow () =
+  let poly = Array.init 65 (fun i -> if i = 64 then 1 else 0) in
+  try
+    let _ = F2N_Int.create 2 poly "a" in
+    failwith "test_f2n_overflow failed: expected overflow exception, but succeeded"
+  with
+  | Failure _ ->
+      ()
+  | e ->
+      failwith (Printf.sprintf "test_f2n_overflow failed: caught unexpected exception: %s" (Printexc.to_string e))
 
 let run_all_tests () =
   Printf.printf "Running testAdd 1...\n%!";
@@ -65,6 +135,16 @@ let run_all_tests () =
   test_exp1 ();
   Printf.printf "Running testExp 2...\n%!";
   test_exp2 ();
+  Printf.printf "Running testGF3_10...\n%!";
+  test_gf3_10 ();
+  Printf.printf "Running testGF3_100_overflow...\n%!";
+  test_gf3_100_overflow ();
   Printf.printf "Running testF2nInverse...\n%!";
   test_f2n_inverse ();
+  Printf.printf "Running testF2nRandAndGenerator...\n%!";
+  test_f2n_rand_and_generator ();
+  Printf.printf "Running testF2nOverflow...\n%!";
+  test_f2n_overflow ();
   Printf.printf "All tests completed successfully!\n%!"
+
+

@@ -1,3 +1,1 @@
-This library contains an implementation of finite field arithmetic in ocaml.
-The intended use is exploratory programming, so performance is desired but not
-a primary goal. 
+This library contains an implementation of finite field arithmetic in ocaml. The intended use is exploratory programming, so performance is desired but not a primary goal. 

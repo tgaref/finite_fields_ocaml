@@ -88,6 +88,30 @@ module Make (Base : Field_intf.BASE_FIELD) = struct
         Base.(acc * term)
       ) Base.one factor_list
 
+  let get_generator field =
+    let p = field.char in
+    if Base.equal p (Base.of_int 2) then element field Base.one
+    else
+      let m = Base.(p - Base.one) in
+      let factors = Arith.factorise m in
+      let rec find g_val =
+        let rec check_factors = function
+          | [] -> true
+          | (q, _) :: tl ->
+              let exp = Base.(m / q) in
+              let res = powm g_val exp p in
+              if Base.equal res Base.one then false
+              else check_factors tl
+        in
+        if check_factors factors then element field g_val
+        else find (Base.(g_val + Base.one))
+      in
+      find (Base.of_int 2)
+
+  let rand_state = Random.State.make_self_init ()
+  let get_rand_elt field =
+    element field (Aux.rand_z rand_state field.char)
+
   let ( + ) = add
   let ( - ) = sub
   let ( * ) = mul

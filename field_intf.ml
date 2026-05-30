@@ -64,13 +64,16 @@ module type PRIME_FIELD = sig
   include FINITE_FIELD
   val create : base_field -> t
   val element : t -> base_field -> element
+  val get_generator : t -> element
+  val get_rand_elt : t -> element
 end
 
 module type EXTENSION_FIELD = sig
   include FINITE_FIELD
   val create : base_field -> base_field array -> string -> t
   val element : t -> base_field array -> element
-  val gen : t -> element
+  val get_generator : t -> element
+  val get_rand_elt : t -> element
   val basis : t -> element list
 end
 
@@ -121,10 +124,15 @@ module Int_scalar : BASE_FIELD with type t = int = struct
     if r < 0 then r + b else r
   let ( ~- ) = ( ~- )
   let pow base exp =
+    let safe_mul x y =
+      if x > 0 && y > 0 && x > Stdlib.max_int / y then
+        failwith "integer overflow"
+      else x * y
+    in
     let rec exp_by_sq acc b e =
       if e <= 0 then acc
-      else if e mod 2 = 1 then exp_by_sq (acc * b) (b * b) (e / 2)
-      else exp_by_sq acc (b * b) (e / 2)
+      else if e mod 2 = 1 then exp_by_sq (safe_mul acc b) (safe_mul b b) (e / 2)
+      else exp_by_sq acc (safe_mul b b) (e / 2)
     in
     exp_by_sq 1 base exp
   let bit_or = ( lor )

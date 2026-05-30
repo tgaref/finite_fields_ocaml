@@ -18,7 +18,14 @@ module Make (Base : Field_intf.BASE_FIELD) = struct
       let poly_mod = Array.map (fun x -> Base.(x % p)) poly in
       let poly' = Aux.drop_last poly_mod in
       if not (Aux.irreduc poly' p) then failwith "extField: non-irreducible polynomial..."
-      else { char = p; def_poly = poly'; root_name = root }
+      else
+        let d = Array.length poly' - 1 in
+        try
+          let _ = Base.pow p (Base.of_int d) in
+          { char = p; def_poly = poly'; root_name = root }
+        with
+        | Failure msg when String.equal msg "integer overflow" ->
+            failwith "extField: field size exceeds scalar representation capacity (integer overflow)..."
 
   let element field v =
     let p = field.char in
@@ -29,11 +36,18 @@ module Make (Base : Field_intf.BASE_FIELD) = struct
     { field; values = r }
 
   let char field = field.char
-  let degree field = Array.length field.def_poly
-  let size field = Base.pow field.char (Base.of_int (Array.length field.def_poly))
+  let degree field = Array.length field.def_poly - 1
+  let size field = Base.pow field.char (Base.of_int (degree field))
   let zero field = { field; values = [||] }
   let one field = { field; values = [|Base.one|] }
-  let gen field = { field; values = [|Base.zero; Base.one|] }
+  let get_generator field = { field; values = [|Base.zero; Base.one|] }
+
+  let rand_state = Core.Random.State.make_self_init ()
+  let get_rand_elt field =
+    let p = field.char in
+    let d = degree field in
+    let random_vals = Array.init d (fun _ -> Aux.rand_z rand_state p) in
+    element field random_vals
 
   let add x y =
     if x.field <> y.field then failwith "(+): elements belong to different fields..."
@@ -85,30 +99,28 @@ module Make (Base : Field_intf.BASE_FIELD) = struct
   let is_zero x = Array.length x.values = 0
   let is_one x = Array.length x.values = 1 && Base.equal x.values.(0) Base.one
 
-  let show_element_list zero_test f idfr =
-    match f with
-    | [] -> "0"
-    | [v] -> Base.to_string v
-    | _ ->
-      let fold_f (acc, idx) x =
-        if zero_test x then (acc, idx + 1)
-        else
-          let term =
-            match idx with
-            | 0 -> Base.to_string x ^ " +"
-            | 1 -> Base.to_string x ^ "*" ^ idfr ^ " +"
-            | _ -> Base.to_string x ^ "*" ^ idfr ^ "^" ^ string_of_int idx ^ " +"
-          in
-          (acc ^ term, idx + 1)
-      in
-      let result, _ = List.fold_left fold_f ("", 0) f in
-      if String.length result = 0 then "0"
-      else
-        String.sub result 0 (String.length result - 2)
+
 
   let show x =
-    show_element_list (Base.equal Base.zero) (Array.to_list x.values) x.field.root_name
-
+    let len = Array.length x.values in
+    if len = 0 then "0"
+    else if len = 1 then Base.to_string x.values.(0)
+    else
+      let idfr = x.field.root_name in
+      let buf = Buffer.create 16 in
+      for i = 0 to len - 1 do
+        let v = x.values.(i) in
+        if not (Base.equal v Base.zero) then (
+          if Buffer.length buf > 0 then Buffer.add_string buf " + ";
+          match i with
+          | 0 -> Buffer.add_string buf (Base.to_string v)
+          | 1 -> Buffer.add_string buf (Base.to_string v ^ "*" ^ idfr)
+          | _ -> Buffer.add_string buf (Base.to_string v ^ "*" ^ idfr ^ "^" ^ string_of_int i)
+        )
+      done;
+      let res = Buffer.contents buf in
+      if String.length res = 0 then "0" else res
+      
   let equal x y =
     let f1 = x.field in
     let f2 = y.field in
@@ -130,8 +142,8 @@ module Make (Base : Field_intf.BASE_FIELD) = struct
     check_vals (Array.length x.values - 1)
 
   let basis field =
-    let a = gen field in
-    let n = Array.length field.def_poly in
+    let a = get_generator field in
+    let n = degree field in
     let rec helper b i acc =
       if i = 0 then List.rev acc
       else
@@ -144,7 +156,7 @@ module Make (Base : Field_intf.BASE_FIELD) = struct
     if is_zero x then failwith "order: zero element..."
     else
       let gf = x.field in
-      let m = Base.(pow gf.char (of_int (Array.length gf.def_poly)) - one) in
+      let m = Base.(pow gf.char (of_int (degree gf)) - one) in
       let factor_list = Arith.factorise m in
       let rec check_prime k q ind =
         if is_one (pow x k) then ind
