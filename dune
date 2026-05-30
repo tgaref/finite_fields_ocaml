@@ -1,0 +1,18 @@
+(library
+ (name finite_fields)
+ (wrapped false)
+ (modules aux f2n arith field_intf primeff extensionff tests)
+ (flags :standard -warn-error -a)
+ (libraries bignum core))
+
+(executable
+ (name ffarith)
+ (modules ffarith)
+ (flags :standard -warn-error -a)
+ (libraries finite_fields))
+
+(executable
+ (name bench)
+ (modules bench)
+ (flags :standard -warn-error -a)
+ (libraries finite_fields))
